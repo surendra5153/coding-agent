@@ -1,3 +1,4 @@
+"""Thin wrapper around an OpenAI-compatible chat completions API."""
 import os
 import time
  
@@ -16,22 +17,41 @@ if not API_KEY or not MODEL:
 client = OpenAI(api_key=API_KEY, base_url=BASE_URL, timeout=60, max_retries=2)
  
  
-def chat(messages, temperature=0.2, **kwargs):
-    """Send a list of messages. Returns (reply_text, usage_dict, latency_seconds)."""
-    start = time.perf_counter()
-    resp = client.chat.completions.create(
-        model=MODEL,
-        messages=messages,
-        temperature=temperature,
-        **kwargs,
-    )
-    latency = time.perf_counter() - start
-    usage = {
+def _usage(resp):
+    """Pull token counts out of a response as a plain dict."""
+    return {
         "prompt_tokens": resp.usage.prompt_tokens,
         "completion_tokens": resp.usage.completion_tokens,
         "total_tokens": resp.usage.total_tokens,
     }
-    return resp.choices[0].message.content, usage, round(latency, 2)
+ 
+ 
+def chat(messages, temperature=0.2, **kwargs):
+    """Send messages. Returns (reply_text, usage_dict, latency_seconds)."""
+    start = time.perf_counter()
+    resp = client.chat.completions.create(
+        model=MODEL, messages=messages, temperature=temperature, **kwargs
+    )
+    latency = round(time.perf_counter() - start, 2)
+    return resp.choices[0].message.content, _usage(resp), latency
+ 
+ 
+def chat_with_tools(messages, tools, temperature=0.2, tool_choice="auto"):
+    """Like chat(), but returns the full message so tool calls are visible.
+ 
+    Returns (message, usage_dict, latency_seconds). message.content may be None
+    and message.tool_calls may be a list of requested tool calls.
+    """
+    start = time.perf_counter()
+    resp = client.chat.completions.create(
+        model=MODEL,
+        messages=messages,
+        tools=tools,
+        tool_choice=tool_choice,
+        temperature=temperature,
+    )
+    latency = round(time.perf_counter() - start, 2)
+    return resp.choices[0].message, _usage(resp), latency
  
  
 if __name__ == "__main__":
